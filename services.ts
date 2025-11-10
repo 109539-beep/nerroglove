@@ -99,43 +99,41 @@ export function getUIStrings(langCode: string): UIStrings {
 // ======================================================
 // ---------------------- LOG SERVICE -------------------
 // ======================================================
-
-// Key format: "ng_logs_YYYY-MM-DD"
 function getLogKey(date: Date): string {
   return `ng_logs_${date.toISOString().slice(0, 10)}`;
 }
 
-// Save a log entry for the current day
 export function saveLog(log: LogEntry): void {
   try {
     const key = getLogKey(log.timestamp);
     const existing: LogEntry[] = JSON.parse(localStorage.getItem(key) || '[]');
-    existing.push(log);
+    existing.push({
+      timestamp: log.timestamp,
+      text: log.text,
+      direction: log.direction,
+    });
     localStorage.setItem(key, JSON.stringify(existing));
   } catch (error) {
     console.error('Failed to save log:', error);
   }
 }
 
-// Load logs for a specific date
 export async function loadLogsForDate(date: Date): Promise<LogEntry[]> {
   try {
-    const key = getLogKey(date);
-    const raw = localStorage.getItem(key);
+    const raw = localStorage.getItem(getLogKey(date));
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return parsed.map((l: any) => ({
       timestamp: new Date(l.timestamp),
       text: l.text,
       direction: l.direction,
-    })) as LogEntry[];
+    }));
   } catch (error) {
     console.error('Failed to load logs:', error);
     return [];
   }
 }
 
-// Load today's logs
 export async function loadLogsForToday(): Promise<LogEntry[]> {
   return loadLogsForDate(new Date());
 }
@@ -143,7 +141,6 @@ export async function loadLogsForToday(): Promise<LogEntry[]> {
 // ======================================================
 // ---------------- DEVICE CONNECTION SERVICE -----------
 // ======================================================
-
 declare global {
   interface Navigator {
     serial: any;
@@ -165,7 +162,7 @@ let port: SerialPort | null = null;
 let reader: ReadableStreamDefaultReader<string> | null = null;
 let keepReading = false;
 
-// Init callbacks
+// Init
 export function init(
   onLog: (t: string, d: 'in' | 'out') => void,
   onConn: (c: ConnectionType, d: Record<string, any> | null) => void,
@@ -211,7 +208,35 @@ export async function connectSerial() {
   }
 }
 
-// --- SERIAL WRITE ---
+// --- BLUETOOTH CONNECTION ---
+export async function connectBluetooth() {
+  if (!navigator.bluetooth) throw new Error('Web Bluetooth not supported.');
+  try {
+    const device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: ['battery_service'],
+    });
+    const server = await device.gatt.connect();
+    logFn(`Bluetooth connected: ${device.name || 'Unknown Device'}`, 'in');
+    connChange(ConnectionType.Bluetooth, { name: device.name });
+
+    // Simulate reading RSSI periodically (mock)
+    setInterval(() => {
+      const rssi = -50 - Math.floor(Math.random() * 30);
+      connChange(ConnectionType.Bluetooth, { name: device.name, rssi });
+    }, 5000);
+  } catch (error) {
+    logFn(`Bluetooth connection error: ${error}`, 'in');
+    throw error;
+  }
+}
+
+// --- REFRESH BLUETOOTH RSSI ---
+export async function refreshBluetoothRssi() {
+  connChange(ConnectionType.Bluetooth, { rssi: -60 + Math.random() * 10 });
+}
+
+// --- SEND MESSAGE ---
 export async function sendMessage(text: string) {
   const msg = text + '\n';
   if (port?.writable) {
