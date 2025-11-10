@@ -100,7 +100,6 @@ const CenterPanel: React.FC<{ logs: LogEntry[]; setLogs: React.Dispatch<React.Se
   return (
     <div className="bg-gradient-to-b from-[#053c3a] to-[#0f574f] rounded-xl p-4 shadow-lg text-white flex flex-col min-h-[720px]">
       <div className="flex items-center gap-3">
-        <div className="text-xl font-extrabold">Neuro Glove Assistance • Inventor: Naitik Anand</div>
         <div className="ml-auto flex items-center gap-3">
           <label htmlFor="lang" className="text-sm text-white/80">{uiStrings.language}</label>
           <select id="lang" value={language} onChange={(e) => setLanguage(e.target.value)} className="bg-white/10 p-2 rounded-lg border-0 text-white focus:outline-none focus:ring-2 focus:ring-teal-400">
