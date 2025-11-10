@@ -55,11 +55,17 @@ const CenterPanel: React.FC<{ logs: LogEntry[]; setLogs: React.Dispatch<React.Se
   }, [isHistoryView, historyDate, setLogs]);
 
   const handleConnect = async (type: 'bluetooth' | 'serial') => {
-    try {
-      if (type === 'bluetooth') await services.connectBluetooth();
-      else await services.connectSerial();
-    } catch (error) { appendLog(`Connection failed: ${error instanceof Error ? error.message : String(error)}`, 'in'); }
-  };
+  try {
+    if (type === 'bluetooth') {
+      await services.connectBluetooth();
+    } else {
+      await services.connectSerial({ baudRate: 9600 }); // ✅ Set baud rate here
+    }
+  } catch (error) {
+    appendLog(`Connection failed: ${error instanceof Error ? error.message : String(error)}`, 'in');
+  }
+};
+
   const handleSend = () => { if (cmd.trim()) { services.sendMessage(cmd); setCmd(''); } };
   const handleAnalyze = async () => {
       if (!logs.length || isAnalyzing) return;
