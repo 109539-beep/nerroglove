@@ -185,11 +185,22 @@ export async function connectSerial() {
     reader = decoder.readable.getReader();
     keepReading = true;
 
-    while (keepReading) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      if (value) logFn(value.trim(), 'in');
+   let buffer = '';
+while (keepReading) {
+  const { value, done } = await reader.read();
+  if (done) break;
+  if (value) {
+    buffer += value;
+    // Split only when newline detected
+    const parts = buffer.split(/\r?\n/);
+    buffer = parts.pop() || '';
+    for (const line of parts) {
+      const clean = line.trim();
+      if (clean) logFn(clean, 'in');
     }
+  }
+}
+
   } catch (error) {
     logFn(`Serial connection error: ${error}`, 'in');
     disconnect();
