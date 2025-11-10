@@ -96,49 +96,54 @@ export function getUIStrings(langCode: string): UIStrings {
   return UI_STRINGS[langCode] || UI_STRINGS.en;
 }
 
-// --- Log Service ---
+// ======================================================
+// ---------------------- LOG SERVICE -------------------
+// ======================================================
+
+// Key format: "ng_logs_YYYY-MM-DD"
 function getLogKey(date: Date): string {
   return `ng_logs_${date.toISOString().slice(0, 10)}`;
 }
 
+// Save a log entry for the current day
 export function saveLog(log: LogEntry): void {
-  const key = getLogKey(log.timestamp);
   try {
-    const logs: string[] = JSON.parse(localStorage.getItem(key) || '[]');
-    const ts = log.timestamp;
-    const time = `${String(ts.getHours()).padStart(2, '0')}:${String(
-      ts.getMinutes(),
-    ).padStart(2, '0')}:${String(ts.getSeconds()).padStart(2, '0')}`;
-    logs.push(`${time} ${log.direction === 'in' ? 'IN' : 'OUT'} ${log.text}`);
-    localStorage.setItem(key, JSON.stringify(logs));
+    const key = getLogKey(log.timestamp);
+    const existing: LogEntry[] = JSON.parse(localStorage.getItem(key) || '[]');
+    existing.push(log);
+    localStorage.setItem(key, JSON.stringify(existing));
   } catch (error) {
     console.error('Failed to save log:', error);
   }
 }
 
+// Load logs for a specific date
 export async function loadLogsForDate(date: Date): Promise<LogEntry[]> {
   try {
-    const logLines: string[] = JSON.parse(localStorage.getItem(getLogKey(date)) || '[]');
-    return logLines
-      .map((line) => {
-        const inIndex = line.indexOf(' IN ');
-        const outIndex = line.indexOf(' OUT ');
-        if (inIndex === -1 && outIndex === -1) return null;
-        const idx = inIndex > -1 ? inIndex : outIndex;
-        const dir = inIndex > -1 ? 'in' : 'out';
-        const timeStr = line.substring(0, idx).trim();
-        const text = line.substring(idx + (dir === 'in' ? 4 : 5));
-        const ts = new Date(`${date.toISOString().slice(0, 10)} ${timeStr}`);
-        return isNaN(ts.getTime()) ? null : { timestamp: ts, direction: dir, text };
-      })
-      .filter((log): log is LogEntry => log !== null);
+    const key = getLogKey(date);
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return parsed.map((l: any) => ({
+      timestamp: new Date(l.timestamp),
+      text: l.text,
+      direction: l.direction,
+    })) as LogEntry[];
   } catch (error) {
     console.error('Failed to load logs:', error);
     return [];
   }
 }
 
-// --- Device Connection Service ---
+// Load today's logs
+export async function loadLogsForToday(): Promise<LogEntry[]> {
+  return loadLogsForDate(new Date());
+}
+
+// ======================================================
+// ---------------- DEVICE CONNECTION SERVICE -----------
+// ======================================================
+
 declare global {
   interface Navigator {
     serial: any;
@@ -160,7 +165,7 @@ let port: SerialPort | null = null;
 let reader: ReadableStreamDefaultReader<string> | null = null;
 let keepReading = false;
 
-// Init
+// Init callbacks
 export function init(
   onLog: (t: string, d: 'in' | 'out') => void,
   onConn: (c: ConnectionType, d: Record<string, any> | null) => void,
@@ -169,12 +174,12 @@ export function init(
   connChange = onConn;
 }
 
-// --- SERIAL (Updated with your working logic) ---
+// --- SERIAL CONNECTION ---
 export async function connectSerial() {
   if (!('serial' in navigator)) throw new Error('Web Serial not supported.');
   try {
     const selectedPort = await navigator.serial.requestPort();
-    await selectedPort.open({ baudRate: 9600 }); // match your working code
+    await selectedPort.open({ baudRate: 9600 });
     port = selectedPort;
 
     logFn('Serial port opened', 'in');
@@ -185,22 +190,20 @@ export async function connectSerial() {
     reader = decoder.readable.getReader();
     keepReading = true;
 
-   let buffer = '';
-while (keepReading) {
-  const { value, done } = await reader.read();
-  if (done) break;
-  if (value) {
-    buffer += value;
-    // Split only when newline detected
-    const parts = buffer.split(/\r?\n/);
-    buffer = parts.pop() || '';
-    for (const line of parts) {
-      const clean = line.trim();
-      if (clean) logFn(clean, 'in');
+    let buffer = '';
+    while (keepReading) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (value) {
+        buffer += value;
+        const parts = buffer.split(/\r?\n/);
+        buffer = parts.pop() || '';
+        for (const line of parts) {
+          const clean = line.trim();
+          if (clean) logFn(clean, 'in');
+        }
+      }
     }
-  }
-}
-
   } catch (error) {
     logFn(`Serial connection error: ${error}`, 'in');
     disconnect();
